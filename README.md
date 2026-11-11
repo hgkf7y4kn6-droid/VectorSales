@@ -87,3 +87,34 @@ acceptance and on reply.
 
 The productized package ($5K, two-week build; $1.5–2K/month to run) is in
 [docs/offer.md](docs/offer.md).
+
+## Prospecting: who to sell VectorSales to
+
+`prospecting/build_list.py` builds the target list: cleaning companies
+(commercial or residential) with **10–50 employees** within about 45 miles of
+Philadelphia, covering the PA collar counties, South Jersey and Wilmington.
+
+1. **Discover** with Google Places Text Search around 16 sub-territory centers,
+   plus Apollo's organization search, which can filter by headcount itself.
+2. **Screen**: still operating, inside the radius (measured from City Hall),
+   de-duplicated by website domain. `--crawl` reads each homepage, respecting
+   robots.txt, to tag commercial or residential and catch "team of 25"-type
+   size clues.
+3. **Enrich** with Apollo by domain for headcount, then the owner or
+   operations decision-maker.
+4. **Output** `prospects_qualified.csv` (10–50 confirmed, best fit first, up
+   to 200) and `prospects_needs_check.csv` (headcount unknown). The columns
+   match the Cost Comparison Tool's prospect import. When you import, leave
+   "drop rows outside 20–500 employees" off, or the 10–19 companies go.
+
+```bash
+export GOOGLE_MAPS_API_KEY=... APOLLO_API_KEY=...
+python prospecting/build_list.py --dry-run     # shows the call budget, no calls
+python prospecting/build_list.py --crawl --out lists/
+```
+
+The default run makes up to 96 Google searches and caps Apollo enrich/people
+calls at 400 (`--max-enrich`). Free-tier allowances and which Apollo endpoints
+a plan can call change often, so check both before a big run. Apollo locks
+most emails until you spend a credit to reveal them. Email outreach must
+follow CAN-SPAM: a real sender, a physical address and a working opt-out.
