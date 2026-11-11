@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request a cleaning quote</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="sample-bar" id="sample-bar" hidden>DEMO FORM · Requests made here are saved as sample leads and no real emails are sent.</div>
+<main class="doc" style="max-width:640px">
+  <div class="doc-h"><div class="co" id="co">Request a quote</div></div>
+  <h1>Get a fixed-price cleaning quote</h1>
+  <p class="muted">Tell us about your space. Most quotes arrive in your inbox within minutes.</p>
+  <form id="f" class="card pad">
+    <div class="grid2">
+      <label>Company <input name="company" required></label>
+      <label>Your name <input name="contact" required autocomplete="name"></label>
+      <label>Work email <input name="email" type="email" required autocomplete="email"></label>
+      <label>Phone <input name="phone" autocomplete="tel"></label>
+      <label>Type of space <select name="facility_type" id="ft"></select></label>
+      <label>Approx. square feet <input name="sqft" type="number" min="500" step="100" required></label>
+      <label>Cleanings per week <select name="visits_per_week">
+        <option>1</option><option>2</option><option>3</option><option selected>5</option><option>6</option><option>7</option></select></label>
+      <label>What you pay now ($/month, optional) <input name="current_monthly" type="number" min="0"></label>
+      <label>City <input name="city"></label>
+      <label>State <input name="state" maxlength="2"></label>
+    </div>
+    <label style="margin-top:12px">Anything we should know? <textarea name="notes" rows="3"></textarea></label>
+    <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+    <div class="actions"><button class="btn brass" type="submit">Get my quote</button></div>
+    <p class="muted small" id="msg" role="status"></p>
+  </form>
+</main>
+<script>
+"use strict";
+const types = { office: "Office", medical: "Medical / dental", school: "School / daycare", retail: "Retail / showroom", industrial: "Warehouse / industrial", fitness: "Gym / fitness" };
+document.getElementById("ft").innerHTML = Object.entries(types).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+fetch("/api/config").then((r) => r.json()).then((c) => { document.getElementById("sample-bar").hidden = !c.demo; }).catch(() => {});
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById("msg");
+  const btn = e.target.querySelector("button");
+  btn.disabled = true; msg.textContent = "Sending…";
+  try {
+    const res = await fetch("/api/inbound", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.fromEntries(new FormData(e.target))) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "That didn't go through. Please call us.");
+    e.target.innerHTML = `<h2>Thanks! Check your inbox.</h2><p class="muted">${data.quoted ? "Your proposal is on its way and should arrive in a few minutes." : "We've got your request and will be in touch shortly."}</p>`;
+  } catch (err) { msg.textContent = err.message; btn.disabled = false; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cleaning proposal</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="sample-bar" id="sample-bar" hidden>SAMPLE PROPOSAL · Made-up company, prices and contact details for a demo. Nothing here is a real offer or charge.</div>
+<main class="doc" id="doc"><p class="muted">Loading your proposal…</p></main>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const money = (n) => (n == null ? "–" : "$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: Number(n) % 1 ? 2 : 0, minimumFractionDigits: Number(n) % 1 ? 2 : 0 }));
+const token = location.pathname.split("/").pop();
+const notifyParent = () => { if (window.parent !== window) window.parent.postMessage({ vs: "changed" }, location.origin); };
+let D, picked;
+
+async function call(path, body) {
+  const res = await fetch(`/api/public/${token}${path}`, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Something went wrong.");
+  return data;
+}
+
+function render() {
+  const q = D.quote, c = D.customer, p = D.profile, inv = D.invoice;
+  $("#sample-bar").hidden = !c.sample;
+  document.title = `Cleaning proposal for ${c.company}`;
+  picked = picked || q.selected;
+  const rec = q.options.find((o) => o.tier === q.recommended);
+  const closed = q.status !== "sent";
+  const saving = rec.savings_annual > 0 ? `<div class="savings-callout"><div class="big num">${money(rec.savings_annual)}</div>
+    <div><b>a year saved</b> with ${esc(rec.name)}, compared with the ${money(q.current_monthly)}/month you pay today.</div></div>` : "";
+  const options = ["good", "better", "best"].map((t) => {
+    const o = q.options.find((x) => x.tier === t);
+    const save = o.savings_monthly == null ? "" : o.savings_monthly > 0 ? `<div class="save pos">Saves ${money(o.savings_monthly)}/month</div>` : "";
+    return `<div class="opt pickable${o.tier === q.recommended ? " rec" : ""}${o.tier === picked ? " picked" : ""}" data-tier="${t}" role="radio" tabindex="0" aria-checked="${o.tier === picked}">
+      ${o.tier === q.recommended ? '<span class="pill brass badge-rec">Recommended</span>' : ""}
+      <div class="tier">${esc(o.label)}</div><div class="nm">${esc(o.name)}</div>
+      <div class="price num">${money(o.monthly)}<small>/month</small></div>${save}
+      <p class="muted small" style="margin:0">${esc(o.summary)}</p>
+      <ul>${o.includes.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`;
+  }).join("");
+
+  let action = "";
+  if (q.status === "sent") {
+    action = `<section class="card pad accept no-print"><h2>Accept this proposal</h2>
+      <p class="muted small">Selected: <b id="picked-name">${esc(q.options.find((o) => o.tier === picked).name)}</b>, ${money(q.options.find((o) => o.tier === picked).monthly)}/month, plus the one-time initial deep clean (${money(q.deep_clean)}).</p>
+      <form id="accept-form" class="grid2" style="align-items:end"><label>Type your full name to sign <input name="name" required autocomplete="name" placeholder="${esc(c.contact || "")}"></label>
+      <button class="btn brass" type="submit">Accept and start service</button></form>
+      <p class="muted small" id="err" role="alert"></p>
+      <p class="small"><a href="#" id="decline">Not right for us</a></p></section>`;
+  } else if (q.status === "won" && inv) {
+    action = `<section class="card pad accept"><span class="pill ok">Accepted by ${esc(q.signed_by)}</span>
+      <h2 style="margin-top:10px">Invoice ${esc(inv.number)}</h2>
+      <table class="invoice-table">${inv.lines.map((l) => `<tr><td>${esc(l.description)}</td><td class="num">${money(l.amount)}</td></tr>`).join("")}
+      <tr class="total"><td>Total due ${new Date(inv.due).toLocaleDateString()}</td><td class="num">${money(inv.total)}</td></tr></table>
+      ${inv.status === "paid" ? `<div class="notice ok">Paid. Thank you! ${esc(inv.method)}.</div>`
+        : `<button class="btn primary no-print" id="pay" type="button">${c.sample ? "Pay now (sample, no charge)" : "Pay now"}</button> <span class="muted small">Or pay by ACH or check.</span>`}
+      <p class="muted small" id="err" role="alert"></p></section>`;
+  } else {
+    action = `<div class="notice">This proposal is ${esc(q.status === "expired" ? "expired" : "closed")}. Call ${esc(p.phone)} and we'll send a fresh one.</div>`;
+  }
+
+  $("#doc").innerHTML = `<div class="doc-h"><div><div class="co">${esc(p.company)}</div><div class="muted small">${esc(p.phone)} · ${esc(p.email)}</div></div>
+    <div class="muted small" style="text-align:right">Proposal ${esc(q.number)}<br>${closed ? "" : `Valid until ${new Date(q.valid_until).toLocaleDateString()}`}</div></div>
+    <p class="muted" style="margin:0">Prepared for ${esc(c.contact || "")}${c.title ? ", " + esc(c.title) : ""}</p>
+    <h1>Commercial cleaning for ${esc(c.company)}</h1>
+    <p class="muted">${Number(q.sqft).toLocaleString()} sq ft ${esc(q.facility_label.toLowerCase())} · ${q.visits_per_week} visits per week · fixed monthly price, no surprise add-ons</p>
+    ${saving}
+    <h3>Choose your option</h3>
+    <div class="options" role="radiogroup">${options}</div>
+    <p class="muted small">Every option includes supervisor-checked visits, a named account manager, insured and background-checked staff, and a one-time initial deep clean (${money(q.deep_clean)}). Prices hold for the first 12 months. Either side can end the agreement with 30 days' notice.</p>
+    ${action}
+    <p class="muted small no-print" style="margin-top:24px"><a href="#" onclick="print();return false">Print or save as PDF</a></p>`;
+
+  document.querySelectorAll(".opt.pickable").forEach((el) => {
+    const choose = () => { if (q.status === "sent") { picked = el.dataset.tier; render(); } };
+    el.addEventListener("click", choose);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); } });
+  });
+  $("#accept-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try { await call("/accept", { tier: picked, name: e.target.name.value }); await load(); notifyParent(); }
+    catch (err) { $("#err").textContent = err.message; }
+  });
+  $("#decline")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const reason = prompt("Sorry to hear that. What would have made it a fit? (optional)", "");
+    if (reason === null) return;
+    try { await call("/decline", { reason }); await load(); notifyParent(); } catch (err) { $("#err").textContent = err.message; }
+  });
+  $("#pay")?.addEventListener("click", async () => {
+    try { await call("/pay", {}); await load(); notifyParent(); } catch (err) { $("#err").textContent = err.message; }
+  });
+}
+async function load() {
+  try { D = await call(""); render(); notifyParent(); }
+  catch (err) { $("#doc").innerHTML = `<div class="notice">${esc(err.message)}</div>`; }
+}
+load();
+</script>
+</body>
+</html>

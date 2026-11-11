@@ -1,0 +1,40 @@
+services:
+  # The sample-data demo. Open sign-in, made-up data, no real emails.
+  - type: web
+    name: vectorsales-demo
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DEMO_MODE
+        value: "1"
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: vectorsales-demo-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  # A client install: copy this block per client.
+  # - type: web
+  #   name: vectorsales-<client>
+  #   runtime: docker
+  #   plan: starter
+  #   healthCheckPath: /health
+  #   envVars:
+  #     - key: DATA_DIR
+  #       value: /var/data
+  #     - key: PUBLIC_URL          # e.g. https://quotes.clientdomain.com (used in email links)
+  #       sync: false
+  #     - key: AUTH_SECRET
+  #       generateValue: true
+  #     - key: AUTH_USERS          # python auth.py hash-password
+  #       sync: false
+  #     - key: SMTP_HOST           # plus SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+  #       sync: false
+  #     - key: ANTHROPIC_API_KEY   # optional: personalizes quote and follow-up emails
+  #       sync: false
+  #   disk:
+  #     name: vectorsales-<client>-data
+  #     mountPath: /var/data
+  #     sizeGB: 1

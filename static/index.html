@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorSales</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1a2c'/%3E%3Cpath d='M8 9l8 15 8-15' stroke='%23d4a84a' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="topbar">
+  <div class="inner">
+    <a class="brand" href="/">Vector<b>Sales</b></a>
+    <span class="tagline">Quote-to-cash for commercial cleaning</span>
+    <span class="spacer"></span>
+    <span class="clock" title="The system clock. In the demo you can move it forward to watch follow-ups go out.">
+      <span id="clock-text">…</span>
+      <button class="btn sm" id="clock-advance" type="button">+1 day</button>
+    </span>
+    <a class="btn sm" href="/request" target="_blank" rel="noopener">Quote form ↗</a>
+    <button class="btn sm" id="open-new" type="button">+ Lead</button>
+    <button class="btn sm" id="open-settings" type="button">Settings</button>
+  </div>
+</header>
+<div class="sample-bar" id="sample-bar" hidden>SAMPLE DATA · Every company, person, price and email on this screen is made up for the demo. No real emails are sent.</div>
+
+<main>
+  <section class="card guide" id="guide" aria-label="Five-minute demo">
+    <div class="guide-intro">
+      <h1>A lead comes in. A quote goes out. Follow-up happens on its own.</h1>
+      <p>Walk through one sample lead from the website form to a paid invoice, in about five minutes.</p>
+      <div class="row">
+        <button class="btn brass" id="demo-autoplay" type="button">▶ Autoplay</button>
+        <button class="btn" id="demo-reset" type="button">Reset sample data</button>
+      </div>
+    </div>
+    <div class="guide-body">
+      <ol class="steps" id="steps"></ol>
+      <div class="narration" id="narration" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Results"></section>
+
+  <div class="board-head">
+    <h2>Pipeline</h2>
+    <span class="muted small" id="board-sub"></span>
+  </div>
+  <section class="board" id="board" aria-label="Pipeline"></section>
+</main>
+
+<div id="overlay-root"></div>
+
+<template id="login-tpl">
+  <div class="scrim top"></div>
+  <form class="modal card pad" style="inset:auto;top:20vh;left:50%;transform:translateX(-50%);width:min(380px,92vw);gap:12px" id="login-form">
+    <h2 class="display" style="font-size:1.6em">Sign in</h2>
+    <label>Email <input name="email" type="email" required autocomplete="username"></label>
+    <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+    <p class="muted small" id="login-err"></p>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>
