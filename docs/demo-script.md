@@ -16,10 +16,21 @@ if you'd rather talk over it.
 | 4:15 | **Back to VectorSales**, **6 · Show the invoice** | "The day-9 email cancelled itself. The deal moved to Won. The invoice for the deep clean and first month went out with the welcome email, and she paid from the same page." Point at **Won** and **Collected**. |
 | 4:45 | (close) | "Lead in, quote out in seconds, follow-up on autopilot, contract signed, invoice paid. Nobody typed a quote or a follow-up. We set this up on your rates and your branding in two weeks." |
 
+## Second pass: "I want to approve everything" (2 minutes)
+
+Most owners want to watch it work before trusting it. After the first run:
+
+1. Press **I approve each step** under the guide, then **1 · Send the sample request**.
+2. Point at **Needs your approval**: "Same lead. Nothing has gone out. The reply and the quote are written and waiting for you." Open **Review & edit** on the instant reply, change a line, **Approve & send**.
+3. Approve the quote from the queue (or the guide button). Skip ahead 2 days: "The follow-up is written when it's due, from what she's done, and waits for your OK. If she accepts first, it's cancelled, never sent late."
+4. After she accepts: "She can't see or pay the invoice until you approve it."
+5. Close with the pilot pitch: "We start you here, with every step on approval, so you see every email for the first two weeks. When you trust it, you flip steps to automatic one at a time, usually the instant reply first."
+
 ## Questions you'll get
 
-- **"Will it send something wrong?"** Big jobs and anything under your target
-  margin wait for approval. You set the auto-send limit. Prices are your own
+- **"Will it send something wrong?"** You choose, step by step. Any step can
+  wait for your approval, and you can edit before it goes. Even on automatic,
+  big jobs and anything under your target margin wait. You set the limit. Prices are your own
   labor rates and margin.
 - **"Does it sound like a robot?"** The templates are short and plain. With AI
   on, it personalizes the opening from what the prospect wrote; prices and

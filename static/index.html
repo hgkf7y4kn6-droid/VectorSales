@@ -33,12 +33,22 @@
         <button class="btn brass" id="demo-autoplay" type="button">▶ Autoplay</button>
         <button class="btn" id="demo-reset" type="button">Reset sample data</button>
       </div>
+      <div class="mode">
+        <span class="small">Who runs each step?</span>
+        <div class="seg" role="group" aria-label="Automation preset">
+          <button type="button" data-preset="auto" aria-pressed="false">Autopilot</button>
+          <button type="button" data-preset="approve" aria-pressed="false">I approve each step</button>
+        </div>
+        <span class="small mode-note" id="mode-note"></span>
+      </div>
     </div>
     <div class="guide-body">
       <ol class="steps" id="steps"></ol>
       <div class="narration" id="narration" aria-live="polite"></div>
     </div>
   </section>
+
+  <section class="card approvals" id="approvals" aria-live="polite" hidden></section>
 
   <section class="kpis" id="kpis" aria-label="Results"></section>
 

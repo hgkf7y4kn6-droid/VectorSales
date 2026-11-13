@@ -22,7 +22,7 @@ DEMO_MODE=1 uvicorn server:app --reload
 Demo mode loads a **clearly labeled sample pipeline**. Every company has
 "(SAMPLE)" in its name, emails use reserved `.example` domains, phone numbers
 are in the fictional 555-01xx range, and banners on every page say it's sample
-data. Sample leads never leave the outbox, even with email configured. **Reset
+data. Sample leads never leave the outbox, even with email configured. Try it both ways: the guide has an **Autopilot / I approve each step** switch, and the same six demo buttons then approve each item instead of watching it send. **Reset
 sample data** rebuilds the pipeline. The talk track is in
 [docs/demo-script.md](docs/demo-script.md).
 
@@ -35,10 +35,11 @@ sample data** rebuilds the pipeline. The talk track is in
 | **Pricing** (`pricing.py`) | Labor-based: square feet ÷ production rate for the facility type, × visits, × wage + burden, + supplies + overhead, then price = cost ÷ (1 − target margin), rounded up to $5. Plus a one-time initial deep clean. |
 | **Good / Better / Best** | Carried over from the Cost Comparison Tool as a *substitution* strategy: **Like-for-like** (all full cleans), **Smart schedule** (some visits become touch-ups, so it costs less and looks the same), **Smart schedule + supplies** (adds quarterly floor care and restroom consumables moved to a lower cost-per-use towel format). |
 | **Cost comparison** | Each option against what the prospect pays their current vendor (Best is compared with the vendor plus their supply spend), and restroom supplies by format on cost per use. |
-| **Guardrails** | Quotes at or above the auto-send limit, or under target margin, wait for one-click approval. Cost and margin (🔒) are internal only: the customer API strips them. |
+| **Guardrails** | Even on automatic, quotes at or above the auto-send limit, or under target margin, wait for one-click approval. Cost and margin (🔒) are internal only: the customer API strips them. |
 | **Follow-up** (`workflow.py`) | Day 2 check-in, day 5 value email (leads with their savings), day 9 last call. Each is written when it sends, from what the prospect has done (e.g. whether they opened the proposal). Stops on reply, acceptance, decline or a re-quote. |
 | **Close** | Proposal page at `/p/<token>`: pick an option, type a name to accept, or decline with a reason. Printable to PDF. |
 | **Cash** | Acceptance creates the invoice (deep clean + first month) and sends it with the welcome email. Customers can pay from the same page. Sample invoices pay without a charge; live payment is a Stripe/QuickBooks hook-up per client. |
+| **Automatic or approve, per step** | The cleaning company chooses for each of four steps, in **Settings**: the instant reply, sending the quote, the day 2/5/9 follow-ups, and the invoice + welcome email. "Automatic" runs it. "I approve first" writes it and holds it in a **Needs your approval** queue on the dashboard, where the rep can edit the email, approve & send, or skip. Held items never reach the customer, and a follow-up still waiting when the customer replies, accepts or declines is cancelled, not sent late. An unapproved invoice is invisible and unpayable to the customer. One click flips every step at once (**Autopilot** / **I approve each step**). |
 | **Reporting** | Speed to lead, lead-to-quote time, open pipeline, won MRR, automated follow-ups, collected, win rate. |
 
 ## Reused from the Cost Comparison Tool

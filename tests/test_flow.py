@@ -161,3 +161,102 @@ def test_api_closed_without_sign_in_unless_demo(tmp_path, monkeypatch):
         assert c.get("/api/state").status_code == 503
         assert c.get("/health").status_code == 200
         assert c.get("/").status_code == 200
+
+
+# --- per-step automation or approval ---------------------------------------------
+
+def _set_auto(client, **steps):
+    r = client.put("/api/settings", json={"automation": steps})
+    assert r.status_code == 200
+    return r.json()["automation"]
+
+
+def _pending(client, lead_id):
+    return [m for m in client.get(f"/api/leads/{lead_id}").json()["messages"] if m["status"] == "pending"]
+
+
+def test_every_step_waits_for_approval(client):
+    _set_auto(client, acknowledgement="approve", quote="approve", follow_up="approve", invoice="approve")
+    client.post("/api/inbound", json={**LEAD, "company": "Careful Co (SAMPLE)"})
+    lead = _lead(client, "Careful Co (SAMPLE)")
+    d = client.get(f"/api/leads/{lead['id']}").json()
+
+    # Nothing has gone out: the reply is written and waiting, the quote is a held draft.
+    assert lead["stage"] == "review" and d["quotes"][0]["status"] == "draft"
+    assert [(m["kind"], m["status"]) for m in d["messages"]] == [("acknowledgement", "pending")]
+    assert not lead.get("first_response_seconds")
+    queue = [a for a in client.get("/api/state").json()["approvals"] if a["lead_id"] == lead["id"]]
+    assert sorted(a["type"] for a in queue) == ["message", "quote"]
+    assert next(a for a in queue if a["type"] == "quote")["why"].startswith("your settings")
+
+    # 1. Approve the reply, editing it first.
+    ack = _pending(client, lead["id"])[0]
+    r = client.post(f"/api/messages/{ack['id']}/approve", json={"subject": ack["subject"], "body": ack["body"] + "\n\nP.S. Edited."})
+    assert r.json()["status"] == "sent" and r.json()["edited"] is True
+    assert _lead(client, "Careful Co (SAMPLE)")["first_response_seconds"] >= 1
+    assert client.post(f"/api/messages/{ack['id']}/approve", json={}).status_code == 400   # can't send twice
+
+    # 2. Approve the quote.
+    q = d["quotes"][0]
+    assert client.post(f"/api/quotes/{q['id']}/send", json={}).status_code == 200
+    assert _lead(client, "Careful Co (SAMPLE)")["stage"] == "sent"
+
+    # 3. The day-2 follow-up is written when due, but waits.
+    sent = _advance(client, 2, lead["id"])
+    assert [(m["step"], m["status"]) for m in sent] == [("check_in", "pending")]
+    assert _pending(client, lead["id"])[0]["subject"]
+    client.post(f"/api/messages/{sent[0]['id']}/approve", json={})
+    assert [m["status"] for m in client.get(f"/api/leads/{lead['id']}").json()["messages"] if m["step"] == "check_in"] == ["sent"]
+
+    # Day 5 is left unapproved; accepting cancels it rather than letting it go out late.
+    _advance(client, 3, lead["id"])
+    assert [m["step"] for m in _pending(client, lead["id"])] == ["value"]
+    token = q["token"]
+    inv = client.post(f"/api/public/{token}/accept", json={"tier": "better", "name": "Pat Doe"}).json()
+    d = client.get(f"/api/leads/{lead['id']}").json()
+    assert [m["status"] for m in d["messages"] if m["step"] == "value"] == ["cancelled"]
+
+    # 4. Invoice is a draft the customer can't see or pay until approved.
+    assert inv["status"] == "draft"
+    assert client.get(f"/api/public/{token}").json()["invoice"] is None
+    assert client.post(f"/api/public/{token}/pay").status_code == 400
+    welcome = _pending(client, lead["id"])[0]
+    assert welcome["kind"] == "welcome"
+    client.post(f"/api/messages/{welcome['id']}/approve", json={})
+    assert client.get(f"/api/public/{token}").json()["invoice"]["status"] == "open"
+    assert client.post(f"/api/public/{token}/pay").json()["status"] == "paid"
+    assert not [a for a in client.get("/api/state").json()["approvals"] if a["lead_id"] == lead["id"]]
+
+
+def test_mixed_modes_only_hold_the_chosen_steps(client):
+    _set_auto(client, follow_up="approve")          # the rest stay automatic
+    client.post("/api/inbound", json={**LEAD, "company": "Mixed Co (SAMPLE)"})
+    lead = _lead(client, "Mixed Co (SAMPLE)")
+    assert lead["stage"] == "sent" and lead["first_response_seconds"] <= 5
+    sent = _advance(client, 2, lead["id"])
+    assert [m["status"] for m in sent] == ["pending"]
+    # Replying stops the queued follow-up too.
+    client.post(f"/api/leads/{lead['id']}/reply", json={"text": "Call me"})
+    assert _pending(client, lead["id"]) == []
+
+
+def test_skip_and_stale_approvals(client):
+    _set_auto(client, acknowledgement="approve")
+    client.post("/api/inbound", json={**LEAD, "company": "Skip Co (SAMPLE)"})
+    lead = _lead(client, "Skip Co (SAMPLE)")
+    ack = _pending(client, lead["id"])[0]
+    assert client.post(f"/api/messages/{ack['id']}/skip").json()["status"] == "cancelled"
+    assert _pending(client, lead["id"]) == []
+
+
+def test_invalid_automation_values_are_ignored(client):
+    assert _set_auto(client, quote="sometimes", bogus="approve", invoice="approve") == {
+        "acknowledgement": "auto", "quote": "auto", "follow_up": "auto", "invoice": "approve"}
+
+
+def test_reset_keeps_the_chosen_mode_and_builds_history_on_autopilot(client):
+    _set_auto(client, quote="approve", follow_up="approve")
+    client.post("/api/demo/reset")
+    state = client.get("/api/state").json()
+    assert state["automation"]["quote"] == "approve" and state["automation"]["follow_up"] == "approve"
+    assert any(lead["stage"] == "won" for lead in state["leads"])    # history still built end to end

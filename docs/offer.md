@@ -12,8 +12,8 @@ own rates and branding.
 | 3–5 | Pricing calibrated against 5–10 of the client's recent real bids until VectorSales lands within their usual range. |
 | 6–8 | Lead sources connected: website form embed, Google/Facebook lead forms or CRM webhook to `/api/inbound`. Email from their domain (SMTP). |
 | 9–10 | Follow-up copy reviewed in their voice; proposal terms; invoice and payment link (Stripe or QuickBooks). |
-| 11–12 | Live pilot on real leads with every quote held for approval. |
-| 13–14 | Auto-send switched on under the agreed limit; team training (about 30 minutes); handover. |
+| 11–12 | Live pilot on real leads with **every step on "I approve first"**, so the owner sees each email and quote before it goes. |
+| 13–14 | Flip steps to automatic one at a time as trust builds (usually the instant reply first, then quotes under the agreed limit); team training (about 30 minutes); handover. |
 
 ## Run: $1,500–2,000 / month
 

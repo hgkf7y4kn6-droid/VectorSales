@@ -46,6 +46,8 @@ HISTORY = [
 def reset(store: Store, base_url: str) -> None:
     """Wipe everything and load the sample pipeline, built by the real workflow."""
     store.clear()
+    chosen = store.setting("automation", {})
+    store.set_setting("automation", {})  # build the history on autopilot, then restore the choice
     for payload, days_ago, outcome in HISTORY:
         store.set_setting("clock_offset", -int(days_ago * 86400))
         lead = workflow.intake(store, payload, base_url, sample=True)
@@ -65,6 +67,7 @@ def reset(store: Store, base_url: str) -> None:
             workflow.record_reply(store, lead["id"], "Can you do Sunday mornings instead of Saturday?")
     store.set_setting("clock_offset", 0)
     workflow.run_due(store)
+    store.set_setting("automation", chosen)
 
 
 def demo_lead(store: Store, base_url: str) -> Dict[str, Any]:

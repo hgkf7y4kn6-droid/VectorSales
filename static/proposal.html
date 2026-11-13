@@ -61,6 +61,9 @@ function render() {
       ${inv.status === "paid" ? `<div class="notice ok">Paid. Thank you! ${esc(inv.method)}.</div>`
         : `<button class="btn primary no-print" id="pay" type="button">${c.sample ? "Pay now (sample, no charge)" : "Pay now"}</button> <span class="muted small">Or pay by ACH or check.</span>`}
       <p class="muted small" id="err" role="alert"></p></section>`;
+  } else if (q.status === "won") {
+    action = `<section class="card pad accept"><span class="pill ok">Accepted by ${esc(q.signed_by)}</span>
+      <h2 style="margin-top:10px">Thank you!</h2><p class="muted">Your account manager is preparing your invoice and welcome details. They'll arrive by email shortly.</p></section>`;
   } else {
     action = `<div class="notice">This proposal is ${esc(q.status === "expired" ? "expired" : "closed")}. Call ${esc(p.phone)} and we'll send a fresh one.</div>`;
   }

@@ -115,8 +115,9 @@ def _lead_summary(lead: Dict[str, Any]) -> Dict[str, Any]:
     quotes = store.list("quotes", lead["id"])
     q = quotes[-1] if quotes else None
     opt = next((o for o in q["options"] if o["tier"] == q["selected"]), None) if q else None
-    pending = [m for m in store.list("messages", lead["id"]) if m["status"] == "scheduled"]
-    return {**lead, "quote": q and {"id": q["id"], "number": q["number"], "status": q["status"],
+    msgs = store.list("messages", lead["id"])
+    pending = [m for m in msgs if m["status"] == "scheduled"]
+    return {**lead, "pending_approvals": len([m for m in msgs if m["status"] == "pending"]), "quote": q and {"id": q["id"], "number": q["number"], "status": q["status"],
                                     "monthly": opt and opt["monthly"], "tier": q["selected"],
                                     "viewed": bool(q.get("viewed_at"))},
             "next_follow_up": min((m["scheduled_for"] for m in pending), default=None)}
@@ -133,6 +134,8 @@ def state():
         "metrics": workflow.metrics(store),
         "profile": workflow.profile(store),
         "rates": workflow.rates(store),
+        "automation": workflow.automation(store),
+        "approvals": workflow.approvals(store),
         "facility_types": {k: v["label"] for k, v in pricing.FACILITY_TYPES.items()},
     }
 
@@ -171,6 +174,8 @@ def requote(lead_id: str, body: Dict[str, Any] = Body(default={})):
         store.put("quotes", q)
         workflow._stop_sequence(store, lead_id, "quote revised")
     q = workflow.draft_quote(store, lead)
+    q["hold_reason"] = "revised"
+    store.put("quotes", q)
     workflow._set_stage(store, lead, "review")
     return q
 
@@ -210,7 +215,27 @@ def settings(body: Dict[str, Any] = Body(...)):
                                       if k in workflow.DEFAULT_PROFILE})
     if "rates" in body:
         store.set_setting("rates", {k: float(v) for k, v in body["rates"].items() if k in pricing.DEFAULT_RATES})
-    return {"profile": workflow.profile(store), "rates": workflow.rates(store)}
+    if "automation" in body:
+        store.set_setting("automation", {k: v for k, v in (body["automation"] or {}).items()
+                                         if k in workflow.DEFAULT_AUTOMATION and v in workflow.MODES})
+    return {"profile": workflow.profile(store), "rates": workflow.rates(store),
+            "automation": workflow.automation(store)}
+
+
+@app.post("/api/messages/{message_id}/approve")
+def approve_message(message_id: str, body: Dict[str, Any] = Body(default={})):
+    try:
+        return workflow.release(store, message_id, str(body.get("subject") or ""), str(body.get("body") or ""))
+    except ValueError as exc:
+        _fail(exc)
+
+
+@app.post("/api/messages/{message_id}/skip")
+def skip_message(message_id: str):
+    try:
+        return workflow.skip(store, message_id)
+    except ValueError as exc:
+        _fail(exc)
 
 
 @app.post("/api/demo/reset")
@@ -272,7 +297,7 @@ def public_quote(token: str):
         "quote": {k: v for k, v in q.items() if k not in ("rates", "base_url", "token", "needs_review")}
         | {"options": [{k: v for k, v in o.items() if k not in INTERNAL} for o in q["options"]]},
         "customer": {k: lead.get(k) for k in ("company", "contact", "title", "city", "state", "sample")},
-        "invoice": invoices[0] if invoices else None,
+        "invoice": next((i for i in invoices if i["status"] != "draft"), None),
         "profile": workflow.profile(store),
     }
 
@@ -300,6 +325,8 @@ def public_pay(token: str):
     invoices = store.find("invoices", quote_id=q["id"])
     if not invoices:
         raise HTTPException(400, "There's no invoice to pay yet.")
+    if invoices[0]["status"] == "draft":
+        raise HTTPException(400, "Your invoice is being prepared and will be emailed to you shortly.")
     if not invoices[0].get("sample"):
         # Real payments go through the client's processor (Stripe payment link, QuickBooks).
         raise HTTPException(400, "Online card payment isn't connected yet. Please pay by ACH or check.")
