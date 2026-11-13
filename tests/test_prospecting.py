@@ -82,3 +82,54 @@ def test_dry_run_makes_no_calls(capsys, monkeypatch):
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
     assert bl.main(["--dry-run"]) == 0
     assert "Text Search calls" in capsys.readouterr().out
+
+
+def geo_http(calls):
+    def http(method, url, headers, body):
+        calls.append((method, url, headers, body))
+        assert headers == {"x-api-key": "k"}          # the key goes in a header, never the URL
+        if url.endswith("/v2/places"):
+            assert body["filter"]["type"] == "circle" and body["limit"] == 100
+            feats = [
+                {"properties": {"name": "Acme Janitorial LLC", "place_id": "p1", "city": "Bensalem", "state_code": "PA",
+                                "street": "Main St", "housenumber": "1", "postcode": "19020", "lat": 40.10, "lon": -74.95,
+                                "categories": ["office.company"]}},
+                {"properties": {"name": "Suds Dry Cleaners", "place_id": "p2", "lat": 40.0, "lon": -75.1,
+                                "categories": ["service.cleaning.dry_cleaning"]}},
+                {"properties": {"name": "Shore Maids", "place_id": "p3", "city": "Atlantic City", "state_code": "NJ",
+                                "lat": 39.36, "lon": -74.43, "categories": ["service"]}},
+            ]
+            return {"features": feats}
+        assert "place-details" in url
+        return {"features": [{"properties": {"website": "https://acmejan.example",
+                                              "contact": {"phone": "+1 215 555 0100", "email": "hello@acmejan.example"}}}]}
+    return http
+
+
+def test_geoapify_discovery_filters_and_details():
+    calls = []
+    http = geo_http(calls)
+    rows = bl.geoapify_discover("k", http=http, delay=0, log=lambda *_: None)
+    assert len(calls) == len(bl.TERRITORIES) * len(bl.GEO_NAME_TERMS)
+    assert sorted(r["company"] for r in rows) == ["Acme Janitorial LLC", "Shore Maids"]   # dry cleaner dropped
+    in_range = [r for r in rows if bl.in_territory(r)]
+    assert [r["company"] for r in in_range] == ["Acme Janitorial LLC"]                   # Atlantic City too far
+    r = in_range[0]
+    bl.geoapify_details(r, "k", http=http, delay=0)
+    assert r["website"] == "https://acmejan.example" and r["phone"] == "+1 215 555 0100"
+    assert r["address"] == "1 Main St" and r["state"] == "PA" and r["source"].startswith("Geoapify")
+
+
+def test_geoapify_row_merges_with_apollo_row_by_domain():
+    g = {"company": "Acme Janitorial LLC", "website": "https://www.acmejan.example/", "city": "Bensalem",
+         "state": "PA", "lat": 40.1, "lng": -74.95, "source": "Geoapify (OpenStreetMap)", "status": "OPERATIONAL"}
+    a = {"company": "Acme Janitorial", "website": "http://acmejan.example", "employees": 18, "source": "Apollo search"}
+    merged = bl.merge([g, a])
+    assert len(merged) == 1 and merged[0]["employees"] == 18 and "Apollo" in merged[0]["source"]
+
+
+def test_dry_run_geoapify(capsys, monkeypatch):
+    monkeypatch.delenv("GEOAPIFY_API_KEY", raising=False)
+    assert bl.main(["--dry-run", "--provider", "geoapify"]) == 0
+    out = capsys.readouterr().out
+    assert "Geoapify: 80 searches" in out and "Google:" not in out

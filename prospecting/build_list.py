@@ -14,8 +14,10 @@ to sell VectorSales to.
 Residential cleaners are kept: the only size rule is 10-50 employees.
 The CSVs use the Cost Comparison Tool's prospect import columns.
 
-    export GOOGLE_MAPS_API_KEY=...  APOLLO_API_KEY=...
+    export GOOGLE_MAPS_API_KEY=...  APOLLO_API_KEY=...  GEOAPIFY_API_KEY=...
     python prospecting/build_list.py --crawl
+    python prospecting/build_list.py --provider geoapify    # OpenStreetMap data, free plan, no card
+    python prospecting/build_list.py --provider both        # union of the two
     python prospecting/build_list.py --skip-google          # Apollo only
     python prospecting/build_list.py --dry-run              # show the plan, no calls
 
@@ -183,6 +185,64 @@ def google_discover(key: str, http: Http = http_json, pages: int = 2, log=print)
             "status": p.get("businessStatus", "OPERATIONAL"), "source": "Google Places",
         })
     return rows
+
+
+# --- discover: Geoapify (OpenStreetMap data) -----------------------------------
+# Geoapify has no janitorial category (only dry cleaning / laundry), so we search the
+# broad "service" and "office" categories by company name instead. Coverage of small
+# cleaning firms in OpenStreetMap is patchy: expect fewer hits than Google, and
+# treat Apollo as the source of truth for headcount.
+
+GEOAPIFY = "https://api.geoapify.com/v2"
+GEO_NAME_TERMS = ("clean", "janitorial", "maid", "custodial", "building services")
+GEO_SKIP_CATEGORIES = ("service.cleaning.dry_cleaning", "service.cleaning.laundry", "service.cleaning.lavoir")
+GEO_DELAY = 0.25  # the free plan allows 5 requests per second
+
+
+def _geo_row(p: Dict[str, Any]) -> Dict[str, Any]:
+    state = p.get("state_code") or _state_abbr(p.get("state") or "")
+    return {
+        "company": p.get("name", ""), "address": " ".join(filter(None, (p.get("housenumber"), p.get("street")))),
+        "city": p.get("city") or p.get("town") or p.get("village") or "", "state": state,
+        "zip": p.get("postcode") or "", "lat": p.get("lat"), "lng": p.get("lon"),
+        "geoapify_id": p.get("place_id", ""), "status": "OPERATIONAL", "source": "Geoapify (OpenStreetMap)",
+    }
+
+
+def geoapify_discover(key: str, http: Http = http_json, delay: float = GEO_DELAY, log=print) -> List[Dict[str, Any]]:
+    found: Dict[str, Dict[str, Any]] = {}
+    calls = 0
+    for town, (lat, lng) in TERRITORIES.items():
+        for term in GEO_NAME_TERMS:
+            data = http("POST", f"{GEOAPIFY}/places", {"x-api-key": key}, {
+                "categories": ["service", "office"], "name": term, "limit": 100,
+                "filter": {"type": "circle", "lon": lng, "lat": lat, "radius": 25000},
+            })
+            calls += 1
+            time.sleep(delay)
+            for f in data.get("features", []):
+                p = f.get("properties", {})
+                cats = p.get("categories") or []
+                if p.get("name") and p.get("place_id") and not any(c in GEO_SKIP_CATEGORIES for c in cats):
+                    found.setdefault(p["place_id"], p)
+    log(f"Geoapify: {calls} searches, {len(found)} unique places")
+    return [_geo_row(p) for p in found.values()]
+
+
+def geoapify_details(row: Dict[str, Any], key: str, http: Http = http_json, delay: float = GEO_DELAY) -> None:
+    """Website, phone and email come from the Place Details call (1 credit each), and only
+    exist when someone has put them in OpenStreetMap."""
+    pid = row.get("geoapify_id")
+    if not pid or row.get("website"):
+        return
+    data = http("GET", f"{GEOAPIFY}/place-details?id={urllib.parse.quote(pid)}&features=details", {"x-api-key": key}, None)
+    time.sleep(delay)
+    for f in data.get("features", []):
+        p = f.get("properties", {})
+        row["website"] = p.get("website") or row.get("website", "")
+        contact = p.get("contact") or {}
+        row["phone"] = row.get("phone") or contact.get("phone", "")
+        row["email"] = row.get("email") or contact.get("email", "")
 
 
 # --- discover + enrich: Apollo -------------------------------------------------
@@ -404,6 +464,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", default=".", help="folder for the CSVs")
     ap.add_argument("--crawl", action="store_true", help="read each homepage for segment and team-size clues")
+    ap.add_argument("--provider", choices=("google", "geoapify", "both"), default="google",
+                    help="where to find places (default google)")
     ap.add_argument("--skip-google", action="store_true")
     ap.add_argument("--skip-apollo", action="store_true")
     ap.add_argument("--google-pages", type=int, default=2, help="result pages per Google search (20 each)")
@@ -412,25 +474,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     gkey, akey = os.environ.get("GOOGLE_MAPS_API_KEY"), os.environ.get("APOLLO_API_KEY")
+    okey = os.environ.get("GEOAPIFY_API_KEY")
+    use_google = args.provider in ("google", "both") and not args.skip_google
+    use_geo = args.provider in ("geoapify", "both")
     searches = len(TERRITORIES) * len(QUERIES)
     print(f"Territory: {len(TERRITORIES)} centers within {MAX_MILES:.0f} mi of Philadelphia ({COUNTIES_NOTE}).")
-    print(f"Google: up to {searches * args.google_pages} Text Search calls"
-          f"{'' if gkey and not args.skip_google else ' (skipped: no GOOGLE_MAPS_API_KEY)' if not args.skip_google else ' (skipped)'}.")
+    if use_google:
+        print(f"Google: up to {searches * args.google_pages} Text Search calls"
+              f"{'' if gkey else ' (skipped: no GOOGLE_MAPS_API_KEY)'}.")
+    if use_geo:
+        print(f"Geoapify: {len(TERRITORIES) * len(GEO_NAME_TERMS)} searches + 1 details call per company in range "
+              f"(1 credit each; free plan is 3,000/day){'' if okey else ' (skipped: no GEOAPIFY_API_KEY)'}.")
     print(f"Apollo: search + up to {args.max_enrich} enrich/people calls"
           f"{'' if akey and not args.skip_apollo else ' (skipped: no APOLLO_API_KEY)' if not args.skip_apollo else ' (skipped)'}.")
     if args.dry_run:
         return 0
 
     rows: List[Dict[str, Any]] = []
-    if gkey and not args.skip_google:
+    if use_google and gkey:
         rows += google_discover(gkey, pages=args.google_pages)
+    geo_rows: List[Dict[str, Any]] = []
+    if use_geo and okey:
+        try:
+            geo_rows = [r for r in geoapify_discover(okey) if in_territory(r)]
+            for i, r in enumerate(geo_rows, 1):
+                geoapify_details(r, okey)
+                if i % 50 == 0:
+                    print(f"  details {i}/{len(geo_rows)}")
+        except RuntimeError as exc:
+            print(f"Geoapify stopped ({exc}). Continuing with what was found.", file=sys.stderr)
+        rows += geo_rows
     if akey and not args.skip_apollo:
         try:
             rows += apollo_discover(akey)
         except RuntimeError as exc:
             print(f"Apollo search failed ({exc}). Continuing with Google results.", file=sys.stderr)
     if not rows:
-        print("Nothing to do: set GOOGLE_MAPS_API_KEY and/or APOLLO_API_KEY.", file=sys.stderr)
+        print("Nothing to do: set GOOGLE_MAPS_API_KEY, GEOAPIFY_API_KEY and/or APOLLO_API_KEY.", file=sys.stderr)
         return 1
     rows = [r for r in merge(rows) if in_territory(r) and r.get("status") in (None, "", "OPERATIONAL")]
     print(f"{len(rows)} companies in territory after de-duplication.")

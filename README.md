@@ -94,8 +94,10 @@ The productized package ($5K, two-week build; $1.5–2K/month to run) is in
 (commercial or residential) with **10–50 employees** within about 45 miles of
 Philadelphia, covering the PA collar counties, South Jersey and Wilmington.
 
-1. **Discover** with Google Places Text Search around 16 sub-territory centers,
-   plus Apollo's organization search, which can filter by headcount itself.
+1. **Discover** with Google Places Text Search around 16 sub-territory centers
+   (`--provider google`, the default) or Geoapify's OpenStreetMap-based Places
+   API (`--provider geoapify`), or both, plus Apollo's organization search,
+   which can filter by headcount itself.
 2. **Screen**: still operating, inside the radius (measured from City Hall),
    de-duplicated by website domain. `--crawl` reads each homepage, respecting
    robots.txt, to tag commercial or residential and catch "team of 25"-type
@@ -108,10 +110,21 @@ Philadelphia, covering the PA collar counties, South Jersey and Wilmington.
    "drop rows outside 20–500 employees" off, or the 10–19 companies go.
 
 ```bash
-export GOOGLE_MAPS_API_KEY=... APOLLO_API_KEY=...
+export GOOGLE_MAPS_API_KEY=... GEOAPIFY_API_KEY=... APOLLO_API_KEY=...   # whichever you use
 python prospecting/build_list.py --dry-run     # shows the call budget, no calls
 python prospecting/build_list.py --crawl --out lists/
 ```
+
+**Google or Geoapify?** Google finds more small businesses, with websites and
+phones included. Geoapify is the safer choice against a surprise bill: its free
+plan (3,000 credits a day, no card) suspends rather than charges. It has no
+janitorial category, so it searches by company name ("clean", "janitorial",
+"maid", ...), and websites and phones come from OpenStreetMap contributors, so
+many small firms will come back without them. Use `--provider both` to merge
+the two. Its terms require OpenStreetMap attribution, and say nothing about
+storing results; the underlying OSM data is open (ODbL), and an internal
+prospect list isn't a published map. With Google, set a daily quota on the
+Places API in the Cloud Console. Budget alerts only email you.
 
 The default run makes up to 96 Google searches and caps Apollo enrich/people
 calls at 400 (`--max-enrich`). Free-tier allowances and which Apollo endpoints
