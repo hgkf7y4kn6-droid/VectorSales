@@ -52,6 +52,15 @@ app = FastAPI(title="VectorSales", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
+def client_ip(request: Request) -> str:
+    """The address to rate-limit on. uvicorn's --forwarded-allow-ips='*' makes
+    request.client.host the first X-Forwarded-For entry, which the caller chooses;
+    Render's proxy appends the real address as the last entry."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    last = forwarded.split(",")[-1].strip() if forwarded else ""
+    return last or (request.client.host if request.client else "?")
+
+
 def base_url(request: Request) -> str:
     return os.environ.get("PUBLIC_URL") or str(request.base_url).rstrip("/")
 
@@ -99,7 +108,7 @@ def config():
 
 @app.post("/auth/login")
 def login(request: Request, body: Dict[str, str] = Body(...)):
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     if authenticator.locked_out(body.get("email", ""), ip):
         raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
     email = authenticator.login(body.get("email", ""), body.get("password", ""), ip)
@@ -256,7 +265,7 @@ _recent: Dict[str, List[float]] = {}
 
 @app.post("/api/inbound")
 def inbound(request: Request, body: Dict[str, Any] = Body(...)):
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     now = time.time()
     hits = [t for t in _recent.get(ip, []) if now - t < 600]
     if len(hits) >= 10:

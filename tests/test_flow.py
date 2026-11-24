@@ -260,3 +260,23 @@ def test_reset_keeps_the_chosen_mode_and_builds_history_on_autopilot(client):
     state = client.get("/api/state").json()
     assert state["automation"]["quote"] == "approve" and state["automation"]["follow_up"] == "approve"
     assert any(lead["stage"] == "won" for lead in state["leads"])    # history still built end to end
+
+
+
+def test_inbound_rate_limit_cannot_be_dodged_with_a_forged_forwarded_for(client):
+    # Production runs uvicorn with --proxy-headers --forwarded-allow-ips='*'. Reproduce that,
+    # then forge the first X-Forwarded-For entry; Render appends the real address last.
+    import server
+    from fastapi.testclient import TestClient
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+    proxied = TestClient(ProxyHeadersMiddleware(server.app, trusted_hosts="*"))
+    for i in range(10):
+        r = proxied.post("/api/inbound", json={**LEAD, "company": f"Spam {i} (SAMPLE)"},
+                         headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.9"})
+        assert r.status_code == 200
+    r = proxied.post("/api/inbound", json={**LEAD, "company": "Spam 11 (SAMPLE)"},
+                     headers={"X-Forwarded-For": "10.9.9.9, 203.0.113.9"})
+    assert r.status_code == 429
+    other = proxied.post("/api/inbound", json={**LEAD, "company": "Real visitor (SAMPLE)"},
+                         headers={"X-Forwarded-For": "198.51.100.7"})
+    assert other.status_code == 200
